@@ -1,6 +1,7 @@
 # Deployment Information
 
 ## Public URL
+
 <https://fast-api-agent-production.up.railway.app>
 
 ## Platform
@@ -22,7 +23,7 @@ curl https://fast-api-agent-production.up.railway.app/health
 curl -X POST https://fast-api-agent-production.up.railway.app/ask \
   -H "X-API-Key: my-super-secret-key" \
   -H "Content-Type: application/json" \
-  -d '{"question": "Xin chào! Cho tôi biết 5% lãi của năm 2025 là bao nhiêu."}'
+  -d '{"question": "What is the savings interest rate?"}'
 ```
 
 ## Environment Variables Set
