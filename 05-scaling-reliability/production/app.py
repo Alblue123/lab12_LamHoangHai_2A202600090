@@ -1,220 +1,103 @@
-"""
-ADVANCED — Stateless Agent với Redis Session
-
-Stateless = agent không giữ state trong memory.
-Mọi state (session, conversation history) lưu trong Redis.
-
-Tại sao stateless quan trọng khi scale?
-  Instance 1: User A gửi request 1 → lưu session trong memory
-  Instance 2: User A gửi request 2 → KHÔNG có session! Bug!
-
-  ✅ Giải pháp: Lưu session trong Redis
-  Bất kỳ instance nào cũng đọc được session của user.
-
-Demo:
-  docker compose up
-  # Sau đó test multi-turn conversation
-  python test_stateless.py
-"""
 import os
-import time
 import json
-import logging
 import uuid
+import logging
+import asyncio
 from datetime import datetime, timezone
-from contextlib import asynccontextmanager
+from typing import List, Optional
 
+import redis
+from fastapi import FastAPI, HTTPException, Depends, Request
+from pydantic import BaseModel, Field
 
-from fastapi import FastAPI, HTTPException, Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
-from utils.mock_llm import ask
-
-# ── Redis (optional — fallback to in-memory dict nếu không có Redis)
-try:
-    import redis
-    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    _redis = redis.from_url(REDIS_URL, decode_responses=True)
-    _redis.ping()
-    USE_REDIS = True
-    print("✅ Connected to Redis")
-except Exception:
-    USE_REDIS = False
-    _memory_store: dict = {}
-    print("⚠️  Redis not available — using in-memory store (not scalable!)")
-
-
+# --- Cấu hình ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-START_TIME = time.time()
-INSTANCE_ID = os.getenv("INSTANCE_ID", f"instance-{uuid.uuid4().hex[:6]}")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+INSTANCE_ID = f"agent-{uuid.uuid4().hex[:6]}"
 
-
-# ──────────────────────────────────────────────────────────
-# Session Storage (Redis-backed, Stateless-compatible)
-# ──────────────────────────────────────────────────────────
-
-def save_session(session_id: str, data: dict, ttl_seconds: int = 3600):
-    """Lưu session vào Redis với TTL."""
-    serialized = json.dumps(data)
-    if USE_REDIS:
-        _redis.setex(f"session:{session_id}", ttl_seconds, serialized)
-    else:
-        _memory_store[f"session:{session_id}"] = data
-
-
-def load_session(session_id: str) -> dict:
-    """Load session từ Redis."""
-    if USE_REDIS:
-        data = _redis.get(f"session:{session_id}")
-        return json.loads(data) if data else {}
-    return _memory_store.get(f"session:{session_id}", {})
-
-
-def append_to_history(session_id: str, role: str, content: str):
-    """Thêm message vào conversation history."""
-    session = load_session(session_id)
-    history = session.get("history", [])
-    history.append({
-        "role": role,
-        "content": content,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
-    # Giữ tối đa 20 messages (10 turns)
-    if len(history) > 20:
-        history = history[-20:]
-    session["history"] = history
-    save_session(session_id, session)
-    return history
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info(f"Starting instance {INSTANCE_ID}")
-    logger.info(f"Storage: {'Redis ✅' if USE_REDIS else 'In-memory ⚠️'}")
-    yield
-    logger.info(f"Instance {INSTANCE_ID} shutting down")
-
-
-app = FastAPI(
-    title="Stateless Agent",
-    version="4.0.0",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ──────────────────────────────────────────────────────────
-# Models
-# ──────────────────────────────────────────────────────────
+# --- Models ---
+class Message(BaseModel):
+    role: str
+    content: str
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class ChatRequest(BaseModel):
     question: str
-    session_id: str | None = None  # None = tạo session mới
+    session_id: Optional[str] = None
 
+# --- Stateless Storage Manager ---
+class SessionStore:
+    """Quản lý State tập trung tại Redis"""
+    def __init__(self, redis_url: str):
+        try:
+            self.client = redis.from_url(redis_url, decode_responses=True)
+            self.client.ping()
+            self.is_available = True
+        except:
+            self.is_available = False
+            self.backup_store = {} # Fallback cho local dev
+            logger.warning("⚠️ Redis offline - Falling back to local memory")
 
-# ──────────────────────────────────────────────────────────
-# Endpoints
-# ──────────────────────────────────────────────────────────
+    def _get_key(self, sid: str) -> str:
+        return f"agent:session:{sid}"
+
+    def get_history(self, sid: str) -> List[dict]:
+        if self.is_available:
+            data = self.client.get(self._get_key(sid))
+            return json.loads(data) if data else []
+        return self.backup_store.get(sid, [])
+
+    def update_history(self, sid: str, messages: List[dict], ttl: int = 3600):
+        # Giữ 10 turns gần nhất (20 messages)
+        truncated = messages[-20:]
+        if self.is_available:
+            self.client.setex(self._get_key(sid), ttl, json.dumps(truncated))
+        else:
+            self.backup_store[sid] = truncated
+
+# --- FastAPI App ---
+app = FastAPI(title="Stateless AI Agent Pro")
+store = SessionStore(REDIS_URL)
 
 @app.post("/chat")
 async def chat(body: ChatRequest):
-    """
-    Multi-turn conversation với session management.
-
-    Gửi session_id trong các request tiếp theo để tiếp tục cuộc trò chuyện.
-    Agent có thể chạy trên bất kỳ instance nào — state trong Redis.
-    """
-    # Tạo hoặc dùng session hiện có
-    session_id = body.session_id or str(uuid.uuid4())
-
-    # Thêm câu hỏi vào history
-    append_to_history(session_id, "user", body.question)
-
-    # Gọi LLM với context (trong mock, ta chỉ dùng câu hỏi hiện tại)
-    session = load_session(session_id)
-    history = session.get("history", [])
-    answer = ask(body.question)
-
-    # Lưu response vào history
-    append_to_history(session_id, "assistant", answer)
-
+    # 1. Định danh session
+    sid = body.session_id or str(uuid.uuid4())
+    
+    # 2. Lấy toàn bộ history 1 lần duy nhất (Stateless Read)
+    history = store.get_history(sid)
+    
+    # 3. Chuẩn bị context cho AI
+    user_msg = Message(role="user", content=body.question)
+    history.append(user_msg.model_dump())
+    
+    # 4. Gọi AI (giả lập)
+    from utils.mock_llm import ask
+    ai_response = ask(body.question)
+    
+    ai_msg = Message(role="assistant", content=ai_response)
+    history.append(ai_msg.model_dump())
+    
+    # 5. Lưu lại state mới vào Redis (Stateless Write)
+    store.update_history(sid, history)
+    
     return {
-        "session_id": session_id,
-        "question": body.question,
-        "answer": answer,
-        "turn": len([m for m in history if m["role"] == "user"]) + 1,
-        "served_by": INSTANCE_ID,  # ← thấy rõ bất kỳ instance nào cũng serve được
-        "storage": "redis" if USE_REDIS else "in-memory",
+        "session_id": sid,
+        "answer": ai_response,
+        "served_by": INSTANCE_ID,
+        "history_count": len(history)
     }
-
-
-@app.get("/chat/{session_id}/history")
-def get_history(session_id: str):
-    """Xem conversation history của một session."""
-    session = load_session(session_id)
-    if not session:
-        raise HTTPException(404, f"Session {session_id} not found or expired")
-    return {
-        "session_id": session_id,
-        "messages": session.get("history", []),
-        "count": len(session.get("history", [])),
-    }
-
-
-@app.delete("/chat/{session_id}")
-def delete_session(session_id: str):
-    """Xóa session (user logout)."""
-    if USE_REDIS:
-        _redis.delete(f"session:{session_id}")
-    else:
-        _memory_store.pop(f"session:{session_id}", None)
-    return {"deleted": session_id}
-
-
-# ──────────────────────────────────────────────────────────
-# Health / Metrics
-# ──────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    redis_ok = False
-    if USE_REDIS:
-        try:
-            _redis.ping()
-            redis_ok = True
-        except Exception:
-            redis_ok = False
-
-    status = "ok" if (not USE_REDIS or redis_ok) else "degraded"
-
     return {
-        "status": status,
-        "instance_id": INSTANCE_ID,
-        "uptime_seconds": round(time.time() - START_TIME, 1),
-        "storage": "redis" if USE_REDIS else "in-memory",
-        "redis_connected": redis_ok if USE_REDIS else "N/A",
+        "status": "ok" if store.is_available else "degraded",
+        "instance": INSTANCE_ID,
+        "storage": "redis" if store.is_available else "local_memory"
     }
-
-
-@app.get("/ready")
-def ready():
-    if USE_REDIS:
-        try:
-            _redis.ping()
-        except Exception:
-            raise HTTPException(503, "Redis not available")
-    return {"ready": True, "instance": INSTANCE_ID}
-
-
+    
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
