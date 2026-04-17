@@ -1,38 +1,41 @@
-# Thông tin Triển khai (Deployment Information)
+# Deployment Information
 
 ## Public URL
-https://fast-api-agent-production.up.railway.app/
+<https://fast-api-agent-production.up.railway.app>
 
-## Nền tảng (Platform)
+## Platform
+
 Railway
 
-## Các Lệnh Kiểm tra (Test Commands)
+## Test Commands
 
-### Kiểm tra Sức khỏe (Health Check)
+### Health Check
+
 ```bash
 curl https://fast-api-agent-production.up.railway.app/health
-# Kết quả mong đợi: {"status": "ok"}
+# Expected: {"status": "ok"}
 ```
 
-### Kiểm tra API (với xác thực Authentication Mới bằng Mock ID)
+### API Test (with authentication)
+
 ```bash
-# Lệnh gửi API với Token của người dùng 'key-vip'
 curl -X POST https://fast-api-agent-production.up.railway.app/ask \
-  -H "X-API-Key: key-vip" \
+  -H "X-API-Key: my-super-secret-key" \
   -H "Content-Type: application/json" \
-  -d '{"question": "Xin chào! Tôi muốn tạo một tài khoản ngân hàng."}'
+  -d '{"question": "Xin chào! Cho tôi biết 5% lãi của năm 2025 là bao nhiêu."}'
 ```
-*(Ghi chú: Lệnh Post đã không còn cần chèn `user_id` giả mạo vào payload nữa, do backend đã tự tin cậy khóa `key-vip` để tự động định danh khách hàng)*
 
-## Các Biến Môi trường Đã thiết lập (Environment Variables Set)
-- `PORT` = `8000`
-- `ENVIRONMENT` = `production`
-- `REDIS_URL` = `redis://default:xxx@redis.railway.internal:6379`
-- `AGENT_API_KEY` = `my-super-secret-key` (Đã được tích hợp vào master_auth)
-- `LOG_LEVEL` = `INFO`
-- `GEMINI_API_KEY` = `AQ.Ab8RN6K....`
+## Environment Variables Set
 
-## Ảnh chụp màn hình (Screenshots)
+- PORT
+- ENVIRONMENT
+- REDIS_URL
+- AGENT_API_KEY
+- LOG_LEVEL
+- GEMINI_API_KEY
+
+## Screenshots
+
 - [Deployment dashboard](screenshots/dashboard.png)
 - [Service running](screenshots/running.png)
 - [Test results](screenshots/test.png)

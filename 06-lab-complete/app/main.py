@@ -102,7 +102,7 @@ def ask(
         check_budget(user_id)
         
         # Input Guard
-        is_safe, msg = input_guard.check(question)
+        is_safe, msg = input_guard.check(request.question)
         if not is_safe:
             logger.warning(f"Input blocked for user {user_id}: {msg}")
             return AskResponse(status="blocked", response=msg, latency=time.time() - start_time)
@@ -117,7 +117,7 @@ def ask(
             sys_instruct = "You are a helpful customer service assistant for VinBank. Keep answers concise."
             for h in history[::-1]:
                 contents.append(h)
-            contents.append(question)
+            contents.append(request.question)
             
             try:
                 response = client.models.generate_content(
@@ -134,7 +134,7 @@ def ask(
                 raw_response = f"This is a mock fallback response because the LLM failed."
         else:
             # Mock canned response
-            raw_response = f"This is a mock response from VinBank about your query: '{question}'"
+            raw_response = f"This is a mock response from VinBank about your query: '{request.question}'"
             time.sleep(0.5)
 
         # Output Guard
@@ -142,7 +142,7 @@ def ask(
 
         # Save to Redis
         redis_client.lpush(history_key, redacted_response)
-        redis_client.lpush(history_key, question)
+        redis_client.lpush(history_key, request.question)
         redis_client.ltrim(history_key, 0, 9) # Keep last 10 messages (5 pairs)
         
         logger.info(f"Successfully processed request for user: {user_id}")
