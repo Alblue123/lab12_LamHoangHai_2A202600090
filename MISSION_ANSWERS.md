@@ -28,8 +28,8 @@
 
 1. **Base image là gì?** `python:3.11` — Là image nhà phát triển đã cài sẵn thư viện cần thiết.
 2. **Working directory là gì?** `/app` — Tất cả những gì thực hiện đều được lưu trữ/copy under folder này.
-3. **Tại sao COPY requirements.txt trước?** Nếu bạn copy `requirements.txt` và chạy `pip install` **trước**, Docker sẽ lưu lại kết quả này (cache layer). Lần sau bạn sửa code `app.py` và build lại, Docker thấy `requirements.txt` không đổi nên nó bỏ qua bước tải thư viện tốn thời gian, và chỉ copy lại phần code mới.
-4. **CMD vs ENTRYPOINT khác nhau thế nào?** `CMD`: Lệnh mặc định — **Dễ bị ghi đè** bởi lệnh mới khi chạy `docker run`. `ENTRYPOINT`: Lệnh cố định — **Không bị ghi đè**. Những gì bạn gõ thêm sau `docker run` chỉ được tính là **tham số** truyền vào.
+3. **Tại sao COPY requirements.txt trước?** Nếu copy `requirements.txt` và chạy `pip install` **trước**, Docker sẽ lưu lại kết quả này (cache layer). Lần sau sửa code `app.py` và build lại, Docker thấy `requirements.txt` không đổi nên nó bỏ qua bước tải thư viện tốn thời gian, và chỉ copy lại phần code mới.
+4. **CMD vs ENTRYPOINT khác nhau thế nào?** `CMD`: Lệnh mặc định — **Dễ bị ghi đè** bởi lệnh mới khi chạy `docker run`. `ENTRYPOINT`: Lệnh cố định — **Không bị ghi đè**. Những gì gõ thêm sau `docker run` chỉ được tính là **tham số** truyền vào.
 
 ### Exercise 2.2: Build và run
 
@@ -46,6 +46,7 @@ docker images my-agent:develop
 - **Tại sao image nhỏ hơn?** Docker chỉ lấy các file ở Stage 2 để build image cuối, bỏ lại toàn bộ công cụ biên dịch và cache ở Stage 1.
 
 Image size comparison:
+
 - Develop: ~1.66 GB
 - Production: ~165 MB
 - Chênh lệch: ~90% nhỏ hơn
@@ -62,7 +63,7 @@ Bốn services giao tiếp với nhau trong một mạng nội bộ (`internal` 
 
 ### Exercise 3.1: Railway deployment
 
-- **URL:** https://fast-api-agent-production.up.railway.app
+- **URL:** <https://fast-api-agent-production.up.railway.app>
 - **Screenshot:** [Deployment dashboard](screenshots/dashboard.png)
 
 ### Exercise 3.2: render.yaml vs railway.toml
@@ -91,6 +92,7 @@ Bốn services giao tiếp với nhau trong một mạng nội bộ (`internal` 
 JWT flow: Gọi `POST /token` với username/password → nhận JWT token → gắn vào header `Authorization: Bearer <token>` cho các request tiếp theo.
 
 Token lấy được:
+
 ```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NzY0MTgyNzIsImV4cCI6MTc3NjQyMTg3Mn0.ZCzYGiVbPDuRNcWhBq60-U7Pe6GtOGF6NXtmJMJfGFs
 ```
@@ -104,6 +106,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50Iiwicm9sZSI6InVzZXIiLCJ
 ### Exercise 4.4: Cost guard implementation
 
 Logic triển khai trong `cost_guard.py`:
+
 - Mỗi user có budget $10/tháng.
 - Track spending trong Redis với key: `budget:{user_id}:{YYYY-MM}`.
 - Mỗi request ước tính chi phí $0.01. Nếu `current + estimated_cost > 10` thì raise HTTP 402.
@@ -130,16 +133,23 @@ def check_budget(user_id: str, estimated_cost: float) -> bool:
 ```python
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Liveness probe"""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc)}
 
 @app.get("/ready")
 def ready():
+    """Readiness probe"""
+    if not is_model_loaded or is_shutting_down:
+        raise HTTPException(status_code=503, detail="Agent is starting up or shutting down")
     try:
         r.ping()
         db.execute("SELECT 1")
-        return {"status": "ready"}
-    except:
-        return JSONResponse(status_code=503, content={"status": "not ready"})
+        return {
+            "status": "ready",
+            "dependencies": {"redis": "ok", "db": "ok"}
+        }
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"status": "not ready", "reason": "Dependency failure"})
 ```
 
 - `/health` (Liveness probe): Xác nhận process còn sống, trả về 200 nếu OK.
@@ -147,24 +157,43 @@ def ready():
 
 ### Exercise 5.2: Graceful shutdown
 
-Xử lý SIGTERM với `signal.signal(signal.SIGTERM, shutdown_handler)` để dừng nhận request mới và hoàn thành hết request đang xử lý trước khi đóng app. Trong FastAPI dùng `lifespan` context manager để cleanup.
+Xử lý SIGTERM với `signal.signal(signal.SIGTERM, shutdown_handler)` để dừng nhận request mới và hoàn thành hết request đang xử lý trước khi đóng app. Trong FastAPI dùng `lifespan` context manager để cleanup. Đã implement trong `05-scaling-reliability/develop/app.py`:
+
+```python
+def shutdown_handler(signum, frame):
+    global is_shutting_down
+    logger.info(f"🚩 Received signal {signum}. Initiating graceful exit...")
+    is_shutting_down = True
+
+signal.signal(signal.SIGTERM, shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
+
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, timeout_graceful_shutdown=30)
+```
 
 ### Exercise 5.3: Stateless design
 
 **Anti-pattern (State trong memory):**
-```python
-conversation_history = {}  # Mất khi instance restart
 
-@app.post("/ask")
-def ask(user_id: str, question: str):
-    history = conversation_history.get(user_id, [])
-```
-
-**Correct (State trong Redis):**
 ```python
+# conversation_history = {} 
+
+import asyncio
 @app.post("/ask")
-def ask(user_id: str, question: str):
+async def ask_agent(user_id: str, question: str):
+    if is_shutting_down:
+        raise HTTPException(status_code=503, detail="Server is shutting down")
+    
+    logger.info(f"Processing for {user_id}: {question}")
+    
     history = r.lrange(f"history:{user_id}", 0, -1)
+    
+    await asyncio.sleep(5)  # Giả lập một tác vụ AI nặng (5 giây)
+    
+    r.rpush(f"history:{user_id}", question)
+    
+    return {"answer": f"Processed: {question}"}
 ```
 
 **Tại sao?** Vì khi scale ra nhiều instances, mỗi instance có memory riêng — nếu request được route sang instance khác, lịch sử hội thoại sẽ bị mất. Redis là trung gian dùng chung cho tất cả instances.
@@ -172,6 +201,7 @@ def ask(user_id: str, question: str):
 ### Exercise 5.4: Load balancing
 
 Chạy `docker compose up --scale agent=3`:
+
 - 3 agent instances được start song song.
 - Nginx phân tán requests theo round-robin.
 - Nếu 1 instance die, traffic tự động chuyển sang instances khác.
@@ -179,6 +209,7 @@ Chạy `docker compose up --scale agent=3`:
 ### Exercise 5.5: Test stateless
 
 Script `test_stateless.py`:
+
 1. Gọi API để tạo conversation.
 2. Kill random instance.
 3. Gọi tiếp — conversation vẫn còn vì state lưu trong Redis, không phải trong memory instance.

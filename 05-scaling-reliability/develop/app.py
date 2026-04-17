@@ -101,14 +101,30 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 signal.signal(signal.SIGINT, shutdown_handler)
 
+# ============================================================
+# EXERCISE 5.3: STATELESS DESIGN
+# ============================================================
+
+# ❌ Anti-pattern: State lưu trong memory
+# conversation_history = {} 
+
 import asyncio
 @app.post("/ask")
-async def ask_agent(question: str):
+async def ask_agent(user_id: str, question: str):
     if is_shutting_down:
         raise HTTPException(status_code=503, detail="Server is shutting down")
     
-    logger.info(f"Processing: {question}")
+    logger.info(f"Processing for {user_id}: {question}")
+    
+    # ✅ Correct pattern: State lưu tập trung ở Redis (Stateless)
+    # Lấy lịch sử hội thoại từ Redis thay vì memory
+    # history = r.lrange(f"history:{user_id}", 0, -1)
+    
     await asyncio.sleep(5)  # Giả lập một tác vụ AI nặng (5 giây)
+    
+    # Giả lập ghi lịch sử mới vào Redis
+    # r.rpush(f"history:{user_id}", question)
+    
     return {"answer": f"Processed: {question}"}
 
 if __name__ == "__main__":
