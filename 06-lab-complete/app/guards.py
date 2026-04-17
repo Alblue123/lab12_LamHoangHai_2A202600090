@@ -22,8 +22,13 @@ class InputGuardrails:
             "banking", "account", "transaction", "transfer", "loan",
             "interest", "savings", "credit", "deposit", "withdrawal",
             "balance", "payment", "atm", "card", "mortgage",
+            # Romanized Vietnamese (no diacritics)
             "tai khoan", "giao dich", "tiet kiem", "lai suat",
             "chuyen tien", "the tin dung", "so du", "vay", "ngan hang",
+            # Unicode Vietnamese (with diacritics)
+            "tài khoản", "giao dịch", "tiết kiệm", "lãi suất", "lãi",
+            "chuyển tiền", "thẻ tín dụng", "số dư", "vay", "ngân hàng",
+            "thanh toán", "rút tiền", "nạp tiền", "thẻ atm", "tín dụng",
         ]
         self.blocked_topics = [
             "hack", "exploit", "weapon", "drug", "illegal",
