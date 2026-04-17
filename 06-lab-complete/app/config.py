@@ -1,55 +1,49 @@
-"""Production config — 12-Factor: tất cả từ environment variables."""
-import os
 import logging
-from dataclasses import dataclass, field
+from pydantic_settings import BaseSettings
+from pydantic import model_validator
 
+logger = logging.getLogger(__name__)
 
-@dataclass
-class Settings:
-    # Server
-    host: str = field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))
-    port: int = field(default_factory=lambda: int(os.getenv("PORT", "8000")))
-    environment: str = field(default_factory=lambda: os.getenv("ENVIRONMENT", "development"))
-    debug: bool = field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
+class Settings(BaseSettings):
+    # Server Config
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = False
 
-    # App
-    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "Production AI Agent"))
-    app_version: str = field(default_factory=lambda: os.getenv("APP_VERSION", "1.0.0"))
+    # App Metadata
+    APP_NAME: str = "VinBank Agent"
+    APP_VERSION: str = "1.0.0"
 
-    # LLM
-    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "gpt-4o-mini"))
+    # Security & Networking
+    AGENT_API_KEY: str = "secret"
+    ALLOWED_ORIGINS: str = "*"
+    
+    # Economics & Limits
+    RATE_LIMIT_PER_MINUTE: int = 10
+    MONTHLY_BUDGET_USD: float = 10.0
 
-    # Security
-    agent_api_key: str = field(default_factory=lambda: os.getenv("AGENT_API_KEY", "dev-key-change-me"))
-    jwt_secret: str = field(default_factory=lambda: os.getenv("JWT_SECRET", "dev-jwt-secret"))
-    allowed_origins: list = field(
-        default_factory=lambda: os.getenv("ALLOWED_ORIGINS", "*").split(",")
-    )
+    # Infrastructure
+    REDIS_URL: str = "redis://redis:6379"
+    LOG_LEVEL: str = "INFO"
 
-    # Rate limiting
-    rate_limit_per_minute: int = field(
-        default_factory=lambda: int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
-    )
+    # LLM Integrations
+    OPENAI_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
+    
+    class Config:
+        env_file = ".env"
 
-    # Budget
-    daily_budget_usd: float = field(
-        default_factory=lambda: float(os.getenv("DAILY_BUDGET_USD", "5.0"))
-    )
-
-    # Storage
-    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
-
-    def validate(self):
-        logger = logging.getLogger(__name__)
-        if self.environment == "production":
-            if self.agent_api_key == "dev-key-change-me":
-                raise ValueError("AGENT_API_KEY must be set in production!")
-            if self.jwt_secret == "dev-jwt-secret":
-                raise ValueError("JWT_SECRET must be set in production!")
-        if not self.openai_api_key:
-            logger.warning("OPENAI_API_KEY not set — using mock LLM")
+    @model_validator(mode='after')
+    def validate_production(self):
+        """12-Factor style validation to ensure security holds in production"""
+        if self.ENVIRONMENT.lower() == "production":
+            if self.AGENT_API_KEY in ["secret", "dev-key-change-me", ""]:
+                raise ValueError("CRITICAL: AGENT_API_KEY must be securely overwritten in production!")
+        
+        if not self.OPENAI_API_KEY and not self.GEMINI_API_KEY:
+            logger.warning("No Real LLM Keys (OpenAI/Gemini) detected — Application will fallback to Mock strings.")
+            
         return self
 
-
-settings = Settings().validate()
+settings = Settings()

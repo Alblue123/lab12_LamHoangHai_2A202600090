@@ -1,100 +1,35 @@
-# Lab 12 — Complete Production Agent
+# Hướng dẫn Cài đặt & Triển khai VinBank Agent 🚀
 
-Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
+Chào mừng bạn đến với phiên bản triền khai môi trường sản phẩm (production release) của Trợ lý AI VinBank! Hệ thống này đã chuyển từ bản nguyên mẫu Jupyter cơ bản thành một kiến trúc microservice cực kỳ mạnh mẽ, không lưu trạng thái (stateless), được bảo vệ bằng cơ chế giới hạn truy cập rate limit thông qua Redis!
 
-## Checklist Deliverable
+## Kiến trúc Công nghệ (Architecture Stack)
+- **FastAPI**: Lõi xử lý Backend bằng Python.
+- **Gemini (`google-genai`)**: Xử lý ngôn ngữ tự nhiên thông qua AI model (`gemini-2.5-flash-lite`).
+- **Redis**: Phân tán để xử lý Lịch sử Chat, Rate Limits và Quản lý Ngân sách.
+- **Nginx & Docker**: Điều phối bằng `docker-compose` phân tải (Load balancer).
+- **Railway**: Triển khai định tuyến Cloud tự động.
 
-- [x] Dockerfile (multi-stage, < 500 MB)
-- [x] docker-compose.yml (agent + redis)
-- [x] .dockerignore
-- [x] Health check endpoint (`GET /health`)
-- [x] Readiness endpoint (`GET /ready`)
-- [x] API Key authentication
-- [x] Rate limiting
-- [x] Cost guard
-- [x] Config từ environment variables
-- [x] Structured logging
-- [x] Graceful shutdown
-- [x] Public URL ready (Railway / Render config)
+## Thiết lập & Chạy Thử (Setup & Testing)
 
----
-
-## Cấu Trúc
-
-```
-06-lab-complete/
-├── app/
-│   ├── main.py         # Entry point — kết hợp tất cả
-│   ├── config.py       # 12-factor config
-│   ├── auth.py         # API Key + JWT
-│   ├── rate_limiter.py # Rate limiting
-│   └── cost_guard.py   # Budget protection
-├── Dockerfile          # Multi-stage, production-ready
-├── docker-compose.yml  # Full stack
-├── railway.toml        # Deploy Railway
-├── render.yaml         # Deploy Render
-├── .env.example        # Template
-├── .dockerignore
-└── requirements.txt
-```
-
----
-
-## Chạy Local
-
+### 1. Cấu hình Biến Môi trường
+Bắt buộc không bao giờ được push file `.env` chứa mật khẩu nội bộ! Hãy nhân bản file cấu hình trắng:
 ```bash
-# 1. Setup
 cp .env.example .env
+```
+Đảm bảo bạn đã dán API thật của `GEMINI_API_KEY` cũng như khoá tuỳ chỉnh của `AGENT_API_KEY` vào trong file `.env` đó.
 
-# 2. Chạy với Docker Compose
-docker compose up
-
-# 3. Test
+### 2. Chạy dưới Localhost
+Xây dựng hạ tầng hoàn chỉnh trên máy chủ thật:
+```bash
+docker-compose up --build -d --scale agent=3
+```
+Chạy thử qua Load Balancer (Nginx) mặc định ở cổng 80:
+```bash
 curl http://localhost/health
-
-# 4. Lấy API key từ .env, test endpoint
-API_KEY=$(grep AGENT_API_KEY .env | cut -d= -f2)
-curl -H "X-API-Key: $API_KEY" \
-     -X POST http://localhost/ask \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What is deployment?"}'
 ```
 
----
-
-## Deploy Railway (< 5 phút)
-
-```bash
-# Cài Railway CLI
-npm i -g @railway/cli
-
-# Login và deploy
-railway login
-railway init
-railway variables set OPENAI_API_KEY=sk-...
-railway variables set AGENT_API_KEY=your-secret-key
-railway up
-
-# Nhận public URL!
-railway domain
-```
-
----
-
-## Deploy Render
-
-1. Push repo lên GitHub
-2. Render Dashboard → New → Blueprint
-3. Connect repo → Render đọc `render.yaml`
-4. Set secrets: `OPENAI_API_KEY`, `AGENT_API_KEY`
-5. Deploy → Nhận URL!
-
----
-
-## Kiểm Tra Production Readiness
-
-```bash
-python check_production_ready.py
-```
-
-Script này kiểm tra tất cả items trong checklist và báo cáo những gì còn thiếu.
+### 3. Giao diện Cửa sổ Web
+Sau khi chạy thành công (hoặc xem trang Railway công khai), bạn có thể vào thẳng root URL `http://localhost/` hoặc `https://<YOUR-RAILWAY-DOMAIN>` bằng trình duyệt web. 
+Đăng nhập tại ô nhập khóa bằng các Mock Token đa danh tính an toàn:
+- Dùng `key-vip` (truy cập vai trò "user_albert")
+- Dùng `key-test` (truy cập vai trò "user_sara")

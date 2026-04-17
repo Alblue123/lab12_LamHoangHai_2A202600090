@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VinBank AI Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --agent-bg: rgba(59, 130, 246, 0.1);
+            --user-bg: rgba(255, 255, 255, 0.05);
+            --error-color: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, #1e1b4b, var(--bg));
+            color: var(--text-main);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            animation: fadeIn 0.6s ease-out forwards;
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.4);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .settings-bar {
+            display: flex;
+            gap: 12px;
+        }
+
+        input[type="password"], input[type="text"] {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="password"]:focus, input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .chat-area {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-area::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 10px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 16px 20px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            animation: slideUp 0.3s ease-out forwards;
+            opacity: 0;
+            transform: translateY(10px);
+            word-wrap: break-word;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: var(--user-bg);
+            border: 1px solid var(--glass-border);
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-agent {
+            align-self: flex-start;
+            background: var(--agent-bg);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-bottom-left-radius: 4px;
+            color: #e2e8f0;
+        }
+
+        .msg-error {
+            align-self: center;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            padding: 12px 20px;
+            background: var(--agent-bg);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            gap: 4px;
+        }
+
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        .input-area {
+            padding: 20px 24px;
+            background: rgba(15, 23, 42, 0.6);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-area input {
+            flex: 1;
+            font-size: 1rem;
+            padding: 14px 20px;
+            border-radius: 12px;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0 24px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Status Badge for latency */
+        .meta-data {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            text-align: right;
+            display: block;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header class="header">
+            <h1>VinBank Agent</h1>
+            <div class="settings-bar">
+                <input type="password" id="apiKeyInput" placeholder="Enter API Key (Try key-vip)">
+            </div>
+        </header>
+
+        <div class="chat-area" id="chatbox">
+            <div class="message msg-agent">
+                Hello! I'm the VinBank smart assistant. You can ask me about creating an account, savings rates, or credit card limits. You can log in securely using Mock Tokens: `key-vip` or `key-test`.
+            </div>
+            
+            <div class="typing-indicator" id="typing">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="promptInput" placeholder="Ask VinBank AI..." autocomplete="off">
+            <button id="sendBtn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatbox = document.getElementById('chatbox');
+        const promptInput = document.getElementById('promptInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const typingIndicator = document.getElementById('typing');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const userInputId = document.getElementById('userInputId');
+
+        function appendMessage(text, type, meta = null) {
+            const div = document.createElement('div');
+            div.className = `message msg-${type}`;
+            div.innerText = text;
+            
+            if (meta) {
+                const metaSpan = document.createElement('span');
+                metaSpan.className = 'meta-data';
+                metaSpan.innerText = meta;
+                div.appendChild(metaSpan);
+            }
+
+            chatbox.insertBefore(div, typingIndicator);
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+
+        async function sendQuery() {
+            const text = promptInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!text) return;
+            if (!apiKey) {
+                appendMessage("❌ Please enter your API key in the top right (try: key-vip).", "error");
+                return;
+            }
+
+            // UI updating
+            promptInput.value = '';
+            appendMessage(text, 'user');
+            typingIndicator.style.display = 'flex';
+            chatbox.scrollTop = chatbox.scrollHeight;
+
+            try {
+                const res = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
+                    body: JSON.stringify({ question: text, user_id: 'auto-override' }) // user_id now overwritten by Token
+                });
+
+                typingIndicator.style.display = 'none';
+
+                if (res.status === 401) {
+                    appendMessage("🔒 Unauthorized: Invalid API Key. Please check your token.", "error");
+                    return;
+                }
+                if (res.status === 429) {
+                    appendMessage("⚠️ Too Many Requests. You're being rate limited. Wait a moment.", "error");
+                    return;
+                }
+                if (res.status === 402) {
+                    appendMessage("💳 Budget Exceeded for this month.", "error");
+                    return;
+                }
+                if (!res.ok) {
+                    appendMessage(`⚠️ Error ${res.status}: An unexpected error occurred.`, "error");
+                    return;
+                }
+
+                const data = await res.json();
+                
+                if (data.status === 'blocked') {
+                    appendMessage(`🛡️ Guardrail Intervention: ${data.response}`, "error", `${(data.latency).toFixed(2)}s`);
+                } else {
+                    appendMessage(data.response, "agent", `${(data.latency).toFixed(2)}s logic time`);
+                }
+
+            } catch (err) {
+                typingIndicator.style.display = 'none';
+                appendMessage("❌ Network error reaching the agent. Is the server online?", "error");
+            }
+        }
+
+        sendBtn.addEventListener('click', sendQuery);
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendQuery();
+        });
+    </script>
+</body>
+</html>

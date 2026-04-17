@@ -325,7 +325,7 @@ cd ../render
 6. Set environment variables trong dashboard
 7. Deploy!
 
-**Nhiệm vụ:** So sánh `render.yaml` với `railway.toml`. Khác nhau gì? 
+**Nhiệm vụ:** So sánh `render.yaml` với `railway.toml`. Khác nhau gì?
 
 * **Render (`render.yaml`)** cấu hình toàn bộ kiến trúc phức tạp (Web, Database, Workers) thành một hệ thống thống nhất.
 * **Railway (`railway.toml`)** cực kỳ tinh gọn, chủ yếu dùng để ghi đè lệnh chạy hoặc tinh chỉnh nhanh cho một ứng dụng cụ thể.
@@ -377,7 +377,6 @@ cd ../../04-api-gateway/develop
 * Lên nền tảng cloud (Railway, Render, AWS...) hoặc mở file `.env`.
 * Sửa giá trị của biến `AGENT_API_KEY` thành một chuỗi ngẫu nhiên mới.
 * **Khởi động lại (Restart)** container/ứng dụng để nó đọc lại biến môi trường mới.
-
 * Nếu gửi request **không có** header `X-API-Key` **$\rightarrow$** Server trả về lỗi **401 Unauthorized** (Missing API key).
 * Nếu gửi request **có header nhưng sai giá trị** **$\rightarrow$** Server trả về lỗi **403 Forbidden** (Invalid API key).
 
@@ -407,7 +406,7 @@ cd ../production
 **Nhiệm vụ:**
 
 1. Đọc `auth.py` — hiểu JWT flow
-2. Lấy token:
+2. Lấy token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50Iiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NzY0MTgyNzIsImV4cCI6MTc3NjQyMTg3Mn0.ZCzYGiVbPDuRNcWhBq60-U7Pe6GtOGF6NXtmJMJfGFs
 
 ```bash
 python app.py
@@ -431,9 +430,9 @@ curl http://localhost:8000/ask -X POST \
 
 **Nhiệm vụ:** Đọc `rate_limiter.py` và trả lời:
 
-- Algorithm nào được dùng? (Token bucket? Sliding window?)
-- Limit là bao nhiêu requests/minute?
-- Làm sao bypass limit cho admin?
+- Algorithm nào được dùng? (Token bucket? Sliding window?) Sliding window counter
+- Limit là bao nhiêu requests/minute? 10/1 phút
+- Làm sao bypass limit cho admin? Nếu là Admin, bạn chỉ cần bỏ qua việc gọi hàm `check()` của RateLimiter.
 
 Test:
 
@@ -469,7 +468,7 @@ def check_budget(user_id: str, estimated_cost: float) -> bool:
 ```
 
 <details>
-<summary> Solution</summary>
+<summary> </summary>
 
 ```python
 import redis
@@ -494,10 +493,10 @@ def check_budget(user_id: str, estimated_cost: float) -> bool:
 
 ### Checkpoint 4
 
-- [ ] Implement API key authentication
-- [ ] Hiểu JWT flow
-- [ ] Implement rate limiting
-- [ ] Implement cost guard với Redis
+- [X] Implement API key authentication
+- [X] Hiểu JWT flow
+- [X] Implement rate limiting
+- [X] Implement cost guard với Redis
 
 ---
 
@@ -582,10 +581,10 @@ def shutdown_handler(signum, frame):
 signal.signal(signal.SIGTERM, shutdown_handler)
 ```
 
-Test:
+Test: Request có hoàn thành
 
 ```bash
-python app.py &
+ python app.py &
 PID=$!
 
 # Gửi request
