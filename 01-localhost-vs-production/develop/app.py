@@ -3,6 +3,12 @@
 
 Đây là cách KHÔNG NÊN làm. Dùng để so sánh với advanced/.
 Hãy đếm bao nhiêu vấn đề bạn tìm được trong file này.
+
+Pb1: hardcode API Key and URL
+Pb2: no config management (env vars, .env, etc.)
+Pb3: using print() for logging
+Pb4: Missing health check endpoint
+Pb5: Fixed port and host configuration
 """
 import os
 
