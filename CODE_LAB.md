@@ -211,6 +211,8 @@ docker compose up
 
 Services nào được start? Chúng communicate thế nào?
 
+Bốn services giao tiếp với nhau trong một mạng nội bộ (`internal` network) hoàn toàn khép kín: **Nginx** là cửa ngõ duy nhất đón yêu cầu từ Internet ở cổng 80, sau đó chuyển tiếp thẳng cho **Agent** (ứng dụng AI trung tâm); từ đây, chỉ có duy nhất Agent mới có quyền nói chuyện với **Redis** (để kiểm tra bộ nhớ đệm/giới hạn) và **Qdrant** (để tìm kiếm dữ liệu), tạo thành một luồng xử lý an toàn và bảo mật.
+
 Test:
 
 ```bash
@@ -323,7 +325,11 @@ cd ../render
 6. Set environment variables trong dashboard
 7. Deploy!
 
-**Nhiệm vụ:** So sánh `render.yaml` với `railway.toml`. Khác nhau gì?
+**Nhiệm vụ:** So sánh `render.yaml` với `railway.toml`. Khác nhau gì? 
+
+* **Render (`render.yaml`)** cấu hình toàn bộ kiến trúc phức tạp (Web, Database, Workers) thành một hệ thống thống nhất.
+* **Railway (`railway.toml`)** cực kỳ tinh gọn, chủ yếu dùng để ghi đè lệnh chạy hoặc tinh chỉnh nhanh cho một ứng dụng cụ thể.
+* **Tóm lại:** Dùng Render cho dự án lớn cần quản lý hạ tầng chi tiết, dùng Railway để deploy siêu tốc và đơn giản.
 
 ### Exercise 3.3: (Optional) GCP Cloud Run (15 phút)
 
@@ -364,9 +370,16 @@ cd ../../04-api-gateway/develop
 
 **Nhiệm vụ:** Đọc `app.py` và tìm:
 
-- API key được check ở đâu?
+- API key được check ở đâu? API key được kiểm tra bên trong hàm `verify_api_key()`
 - Điều gì xảy ra nếu sai key?
 - Làm sao rotate key?
+
+* Lên nền tảng cloud (Railway, Render, AWS...) hoặc mở file `.env`.
+* Sửa giá trị của biến `AGENT_API_KEY` thành một chuỗi ngẫu nhiên mới.
+* **Khởi động lại (Restart)** container/ứng dụng để nó đọc lại biến môi trường mới.
+
+* Nếu gửi request **không có** header `X-API-Key` **$\rightarrow$** Server trả về lỗi **401 Unauthorized** (Missing API key).
+* Nếu gửi request **có header nhưng sai giá trị** **$\rightarrow$** Server trả về lỗi **403 Forbidden** (Invalid API key).
 
 Test:
 
